@@ -14,7 +14,7 @@ const corsOptions = {
     origin: [
         'http://localhost:3000',
         'http://localhost:8080',
-        'https://curious-quokka-36d711.netlify.app/' // falls vorhanden
+        'https://curious-quokka-36d711.netlify.app' // falls vorhanden
     ],
     credentials: true,
     optionsSuccessStatus: 200
