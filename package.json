@@ -1,9 +1,9 @@
 {
   "name": "msi-tournament-backend",
-  "version": "1.0.0",
-  "description": "Backend für MSI FIFA Tournament Anmeldung",
+  "version": "2.0.0",
+  "description": "Backend für MSI Gaming Universe Tournament Platform",
   "main": "server.js",
-   "scripts": {
+  "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
@@ -17,12 +17,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": [
-    "tournament",
-    "fifa",
-    "metamask",
-    "blockchain"
-  ],
+  "keywords": ["tournament","gaming","fortnite","csgo2","email-auth"],
   "author": "MSI Tournament Team",
   "license": "MIT"
 }
