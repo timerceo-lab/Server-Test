@@ -4,6 +4,87 @@ const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
 
+// ========== EMAIL (RESEND) ==========
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://msi-frontend.onrender.com';
+const FROM_EMAIL = 'MSI Tournament <onboarding@resend.dev>';
+
+async function sendEmail(to, subject, html) {
+    if (!RESEND_API_KEY) {
+        console.warn('⚠️  RESEND_API_KEY nicht gesetzt – Email nicht gesendet an:', to);
+        return false;
+    }
+    try {
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+            body: JSON.stringify({ from: FROM_EMAIL, to, subject, html })
+        });
+        const data = await res.json();
+        if (!res.ok) { console.error('Resend Fehler:', data); return false; }
+        console.log(`📧 Email gesendet an ${to}: ${subject}`);
+        return true;
+    } catch (e) { console.error('Email-Fehler:', e.message); return false; }
+}
+
+function generateVerifyToken() {
+    return crypto.randomBytes(32).toString('hex');
+}
+
+function buildVerifyEmailHTML(username, verifyUrl) {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#0a0a0a;font-family:'Segoe UI',sans-serif;">
+      <div style="max-width:520px;margin:40px auto;background:linear-gradient(145deg,#1a1a2e,#0f0f1a);border:1px solid #333;border-radius:20px;overflow:hidden;">
+        <div style="background:linear-gradient(90deg,#00ff88,#00ccff);padding:4px;"></div>
+        <div style="padding:40px 36px;">
+          <div style="font-size:2rem;margin-bottom:8px;">🎮</div>
+          <h1 style="color:#fff;font-size:1.5rem;margin:0 0 8px;">Hallo ${username}!</h1>
+          <p style="color:#aaa;font-size:0.95rem;line-height:1.6;margin:0 0 28px;">
+            Bitte bestätige deine Email-Adresse um deinen MSI Tournament Account zu aktivieren.
+          </p>
+          <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(45deg,#00ff88,#00ccff);color:#000;font-weight:bold;font-size:1rem;padding:14px 32px;border-radius:25px;text-decoration:none;">
+            ✅ Email bestätigen
+          </a>
+          <p style="color:#555;font-size:0.8rem;margin-top:28px;">
+            Dieser Link ist 24 Stunden gültig.<br>
+            Falls du dich nicht registriert hast, ignoriere diese Email.
+          </p>
+        </div>
+        <div style="background:linear-gradient(90deg,#00ff88,#00ccff);padding:4px;"></div>
+      </div>
+    </body>
+    </html>`;
+}
+
+function buildResendVerifyEmailHTML(username, verifyUrl) {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#0a0a0a;font-family:'Segoe UI',sans-serif;">
+      <div style="max-width:520px;margin:40px auto;background:linear-gradient(145deg,#1a1a2e,#0f0f1a);border:1px solid #333;border-radius:20px;overflow:hidden;">
+        <div style="background:linear-gradient(90deg,#00ff88,#00ccff);padding:4px;"></div>
+        <div style="padding:40px 36px;">
+          <div style="font-size:2rem;margin-bottom:8px;">📧</div>
+          <h1 style="color:#fff;font-size:1.5rem;margin:0 0 8px;">Neue Bestätigungs-Email</h1>
+          <p style="color:#aaa;font-size:0.95rem;line-height:1.6;margin:0 0 28px;">
+            Hey ${username}, hier ist dein neuer Bestätigungslink:
+          </p>
+          <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(45deg,#00ff88,#00ccff);color:#000;font-weight:bold;font-size:1rem;padding:14px 32px;border-radius:25px;text-decoration:none;">
+            ✅ Email bestätigen
+          </a>
+          <p style="color:#555;font-size:0.8rem;margin-top:28px;">Dieser Link ist 24 Stunden gültig.</p>
+        </div>
+        <div style="background:linear-gradient(90deg,#00ff88,#00ccff);padding:4px;"></div>
+      </div>
+    </body>
+    </html>`;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -154,10 +235,16 @@ app.post('/user/register', async (req, res) => {
             return res.status(400).json({ error:'Dieser Username ist bereits vergeben' });
 
         const now = new Date().toISOString();
+        const verifyToken = generateVerifyToken();
+        const verifyExpires = new Date(Date.now() + 24*60*60*1000).toISOString(); // 24h
+
         users.users[key] = {
             id: key, email: key,
             platformUsername: platformUsername.trim(),
             passwordHash: hashPassword(password),
+            emailVerified: false,
+            verifyToken,
+            verifyExpires,
             gamertags: { playstation: gamertags?.playstation?.trim()||'', xbox: gamertags?.xbox?.trim()||'', steam: gamertags?.steam?.trim()||'' },
             stats: { totalWins:0, totalPoints:0, wins2p:0, winsTournaments:0,
                 gameStats: { fifa:{tournaments:0,wins:0}, cod:{tournaments:0,wins:0}, fortnite:{tournaments:0,wins:0}, csgo2:{tournaments:0,wins:0}, lol:{tournaments:0,wins:0}, motogp:{tournaments:0,wins:0} }
@@ -167,8 +254,13 @@ app.post('/user/register', async (req, res) => {
         if (!users.emailIndex) users.emailIndex = {};
         users.emailIndex[key] = key;
         await writeGlobalUsers(users);
-        const safe = {...users.users[key]}; delete safe.passwordHash;
-        res.status(201).json({ message:'Erfolgreich registriert', user:safe });
+
+        // Send verification email
+        const verifyUrl = `${FRONTEND_URL}/profile.html?verify=${verifyToken}&email=${encodeURIComponent(key)}`;
+        await sendEmail(key, '✅ MSI Tournament – Email bestätigen', buildVerifyEmailHTML(platformUsername.trim(), verifyUrl));
+
+        const safe = {...users.users[key]}; delete safe.passwordHash; delete safe.verifyToken;
+        res.status(201).json({ message:'Registrierung erfolgreich! Bitte prüfe deine Email und bestätige deinen Account.', user:safe, emailSent:true });
     } catch (e) { console.error(e); res.status(500).json({ error:'Interner Serverfehler' }); }
 });
 
@@ -179,11 +271,65 @@ app.post('/user/login', async (req, res) => {
         const users = await readGlobalUsers();
         const user = users.users[email.toLowerCase()];
         if (!user||user.passwordHash!==hashPassword(password)) return res.status(401).json({ error:'Email oder Passwort falsch' });
+
+        // Block unverified accounts
+        if (!user.emailVerified) {
+            return res.status(403).json({
+                error:'Bitte bestätige zuerst deine Email-Adresse.',
+                emailNotVerified: true,
+                email: user.email
+            });
+        }
+
         const token = crypto.randomBytes(32).toString('hex');
         user.sessionToken = token; user.lastLogin = new Date().toISOString();
         await writeGlobalUsers(users);
-        const safe = {...user}; delete safe.passwordHash;
+        const safe = {...user}; delete safe.passwordHash; delete safe.verifyToken;
         res.json({ message:'Login erfolgreich', user:safe, token });
+    } catch (e) { res.status(500).json({ error:'Interner Serverfehler' }); }
+});
+
+// Verify email via token
+app.get('/user/verify-email', async (req, res) => {
+    try {
+        const { token, email } = req.query;
+        if (!token||!email) return res.status(400).json({ error:'Token und Email erforderlich' });
+        const users = await readGlobalUsers();
+        const key = decodeURIComponent(email).toLowerCase();
+        const user = users.users[key];
+        if (!user) return res.status(404).json({ error:'Benutzer nicht gefunden' });
+        if (user.emailVerified) return res.json({ message:'Email bereits bestätigt', alreadyVerified:true });
+        if (user.verifyToken !== token) return res.status(400).json({ error:'Ungültiger Bestätigungslink' });
+        if (new Date(user.verifyExpires) < new Date()) return res.status(400).json({ error:'Bestätigungslink abgelaufen. Bitte neuen anfordern.', expired:true });
+        user.emailVerified = true;
+        user.verifyToken = null;
+        user.verifyExpires = null;
+        user.updatedAt = new Date().toISOString();
+        await writeGlobalUsers(users);
+        res.json({ message:'Email erfolgreich bestätigt! Du kannst dich jetzt einloggen.', verified:true });
+    } catch (e) { res.status(500).json({ error:'Interner Serverfehler' }); }
+});
+
+// Resend verification email
+app.post('/user/resend-verification', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error:'Email erforderlich' });
+        const users = await readGlobalUsers();
+        const key = email.toLowerCase();
+        const user = users.users[key];
+        if (!user) return res.status(404).json({ error:'Benutzer nicht gefunden' });
+        if (user.emailVerified) return res.status(400).json({ error:'Email bereits bestätigt' });
+
+        // Generate new token
+        user.verifyToken = generateVerifyToken();
+        user.verifyExpires = new Date(Date.now() + 24*60*60*1000).toISOString();
+        await writeGlobalUsers(users);
+
+        const verifyUrl = `${FRONTEND_URL}/profile.html?verify=${user.verifyToken}&email=${encodeURIComponent(key)}`;
+        await sendEmail(key, '✅ MSI Tournament – Neue Bestätigungs-Email', buildResendVerifyEmailHTML(user.platformUsername, verifyUrl));
+
+        res.json({ message:'Bestätigungs-Email wurde erneut gesendet.' });
     } catch (e) { res.status(500).json({ error:'Interner Serverfehler' }); }
 });
 
