@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://msi-frontend.onrender.com';
-const FROM_EMAIL = 'MSI Tournament <onboarding@resend.dev>';
+const FROM_EMAIL = 'Zyphor <onboarding@resend.dev>';
 
 async function sendEmail(to, subject, html) {
     if (!RESEND_API_KEY) {
@@ -44,7 +44,7 @@ function buildVerifyEmailHTML(username, verifyUrl) {
           <div style="font-size:2rem;margin-bottom:8px;">🎮</div>
           <h1 style="color:#fff;font-size:1.5rem;margin:0 0 8px;">Hallo ${username}!</h1>
           <p style="color:#aaa;font-size:0.95rem;line-height:1.6;margin:0 0 28px;">
-            Bitte bestätige deine Email-Adresse um deinen MSI Tournament Account zu aktivieren.
+            Bitte bestätige deine Email-Adresse um deinen Zyphor Account zu aktivieren.
           </p>
           <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(45deg,#00ff88,#00ccff);color:#000;font-weight:bold;font-size:1rem;padding:14px 32px;border-radius:25px;text-decoration:none;">
             ✅ Email bestätigen
@@ -257,7 +257,7 @@ app.post('/user/register', async (req, res) => {
 
         // Send verification email
         const verifyUrl = `${FRONTEND_URL}/profile.html?verify=${verifyToken}&email=${encodeURIComponent(key)}`;
-        await sendEmail(key, '✅ MSI Tournament – Email bestätigen', buildVerifyEmailHTML(platformUsername.trim(), verifyUrl));
+        await sendEmail(key, '✅ Zyphor – Email bestätigen', buildVerifyEmailHTML(platformUsername.trim(), verifyUrl));
 
         const safe = {...users.users[key]}; delete safe.passwordHash; delete safe.verifyToken;
         res.status(201).json({ message:'Registrierung erfolgreich! Bitte prüfe deine Email und bestätige deinen Account.', user:safe, emailSent:true });
@@ -327,7 +327,7 @@ app.post('/user/resend-verification', async (req, res) => {
         await writeGlobalUsers(users);
 
         const verifyUrl = `${FRONTEND_URL}/profile.html?verify=${user.verifyToken}&email=${encodeURIComponent(key)}`;
-        await sendEmail(key, '✅ MSI Tournament – Neue Bestätigungs-Email', buildResendVerifyEmailHTML(user.platformUsername, verifyUrl));
+        await sendEmail(key, '✅ Zyphor – Neue Bestätigungs-Email', buildResendVerifyEmailHTML(user.platformUsername, verifyUrl));
 
         res.json({ message:'Bestätigungs-Email wurde erneut gesendet.' });
     } catch (e) { res.status(500).json({ error:'Interner Serverfehler' }); }
