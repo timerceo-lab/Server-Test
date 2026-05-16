@@ -1,7 +1,7 @@
 {
-  "name": "msi-tournament-backend",
+  "name": "zyphor-tournament-backend",
   "version": "2.0.0",
-  "description": "Backend für MSI Gaming Universe Tournament Platform",
+  "description": "Backend für Zyphor Tournament Platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "nodemailer": "^6.9.9"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["tournament","gaming","fortnite","csgo2","email-auth"],
-  "author": "MSI Tournament Team",
+  "author": "Zyphor Team",
   "license": "MIT"
 }
