@@ -3,29 +3,38 @@ const fs = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
-// ========== EMAIL (RESEND) ==========
+// ========== EMAIL (SMTP via Schwarzkünstler) ==========
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://msi-frontend.onrender.com';
-const FROM_EMAIL = 'Zyphor <onboarding@resend.dev>';
+const SMTP_HOST = process.env.SMTP_HOST || 'mail.zyphor-group.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const FROM_EMAIL = `Zyphor <${SMTP_USER}>`;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://zyphor-group.com';
+
+const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    tls: { rejectUnauthorized: false }
+});
 
 async function sendEmail(to, subject, html) {
-    if (!RESEND_API_KEY) {
-        console.warn('⚠️  RESEND_API_KEY nicht gesetzt – Email nicht gesendet an:', to);
+    if (!SMTP_USER || !SMTP_PASS) {
+        console.warn('⚠️  SMTP nicht konfiguriert – Email nicht gesendet an:', to);
         return false;
     }
     try {
-        const res = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
-            body: JSON.stringify({ from: FROM_EMAIL, to, subject, html })
-        });
-        const data = await res.json();
-        if (!res.ok) { console.error('Resend Fehler:', data); return false; }
+        await transporter.sendMail({ from: FROM_EMAIL, to, subject, html });
         console.log(`📧 Email gesendet an ${to}: ${subject}`);
         return true;
-    } catch (e) { console.error('Email-Fehler:', e.message); return false; }
+    } catch (e) {
+        console.error('Email-Fehler:', e.message);
+        return false;
+    }
 }
 
 function generateVerifyToken() {
